@@ -1,6 +1,6 @@
 {
   "name": "@sitearcade/next-api-router",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "NextJS API router, so you can easily split up funcs properly.",
   "license": "MIT",
   "homepage": "https://www.sitearcade.com",
