@@ -71,7 +71,7 @@ export function router(routes, {prefix = '/api'} = {}) {
 
         return finish({
           ware: [...acc.ware, ...thisRoute.ware],
-          params: {...acc.params, matchParams},
+          params: {...acc.params, ...matchParams},
         });
       }, {ware: [], params: {}}, routes);
 
