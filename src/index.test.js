@@ -1,12 +1,12 @@
 // import
 
-import {createMockProxy} from '@sitearcade/jest-preset/tools';
+import {proxyMock} from '@sitearcade/jest-preset/tools';
 
 import {router, route} from './index';
 
 // config
 
-const res = createMockProxy();
+const res = proxyMock.createMockProxy();
 
 // fns
 
@@ -16,6 +16,10 @@ const sendErr = () => throw new Error('Fail!');
 const useResWare = (req, res) => res.use();
 const nextResWare = (req, res, next) => next(null);
 const nextErrWare = (req, res, next) => next(new Error('Fail!'));
+
+const createErr = (msg = 'Fail!', props = {}) =>
+  // eslint-disable-next-line fp/no-mutating-assign
+  Object.assign(new Error(msg), props);
 
 // test
 
@@ -90,9 +94,11 @@ describe('route([method, [path,]] ...ware)', () => {
     const handler = route('ANY', '/route/*', sendRes);
 
     await handler({method: 'GET', url: '/api/route/cool'}, res);
+    await handler({method: 'GET', url: '/api/route/cool/er'}, res);
+    await handler({method: 'GET', url: '/api/route/cool/est'}, res);
     await handler({method: 'POST', url: '/api/elsewise'}, res);
 
-    expect(res.send).toHaveBeenCalledTimes(1);
+    expect(res.send).toHaveBeenCalledTimes(3);
     expect(res.send).toHaveBeenCalledWith('ok');
   });
 
@@ -114,5 +120,34 @@ describe('route([method, [path,]] ...ware)', () => {
     await handler({method: 'GET', url: '/api/route/req/opt'}, res);
 
     expect(res.send).toHaveBeenCalledWith({req: 'req', opt: 'opt'});
+  });
+
+  it('sends reasonable error response', async () => {
+    const handler = router([
+      {
+        path: '/err/default',
+        ware: () => throw createErr('Default!', {}),
+      },
+      {
+        path: '/err/status',
+        ware: () => throw createErr('410!', {status: 410}),
+      },
+    ]);
+
+    await handler({url: '/api/err/default'}, res);
+
+    expect(res.json).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json.mock.calls[0][0]).toHaveProperty('error', 'Default!');
+    expect(res.json.mock.calls[0][0].stack).toBeArray();
+
+    res.mockClear();
+
+    await handler({url: '/api/err/status'}, res);
+
+    expect(res.json).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(410);
+    expect(res.json.mock.calls[0][0]).toHaveProperty('error', '410!');
+    expect(res.json.mock.calls[0][0].stack).toBeArray();
   });
 });

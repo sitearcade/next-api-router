@@ -5,6 +5,9 @@ import Pattern from 'url-pattern';
 
 // vars
 
+const cwd = process.cwd();
+
+const stackLineRx = /\n\s+at\s+/g;
 const queryRx = /\?.+$/;
 
 const anyMethods = [
@@ -94,10 +97,10 @@ export function router(routes, {prefix = '/api'} = {}) {
         ))
       ), Promise.resolve(null));
     } catch (err) {
-      res.status(500);
+      res.status(err.status || 500);
       res.json({
         error: err.message,
-        stack: err.stack,
+        stack: err.stack.replaceAll(cwd, '').split(stackLineRx),
       });
     }
   };
