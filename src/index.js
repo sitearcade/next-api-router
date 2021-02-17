@@ -5,7 +5,7 @@ import Pattern from 'url-pattern';
 
 // vars
 
-const cwd = process.cwd();
+const cwd = new RegExp(process.cwd());
 
 const stackLineRx = /\n\s+at\s+/g;
 const queryRx = /\?.+$/;
@@ -100,7 +100,7 @@ export function router(routes, {prefix = '/api'} = {}) {
       res.status(err.status || 500);
       res.json({
         error: err.message,
-        stack: err?.stack?.replaceAll(cwd, '').split(stackLineRx),
+        stack: err?.stack?.replace(cwd, '').split(stackLineRx),
       });
     }
   };
