@@ -100,7 +100,7 @@ export function router(routes, {prefix = '/api'} = {}) {
       res.status(err.status || 500);
       res.json({
         error: err.message,
-        stack: err.stack.replaceAll(cwd, '').split(stackLineRx),
+        stack: err?.stack?.replaceAll(cwd, '').split(stackLineRx),
       });
     }
   };
