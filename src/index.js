@@ -5,12 +5,14 @@ import Pattern from 'url-pattern';
 
 // vars
 
-const cwd = new RegExp(process.cwd());
+const cwdRx = new RegExp(process.cwd());
 
-const stackLineRx = /\n\s+at\s+/g;
+const spaceRx = /\s+/;
 const queryRx = /\?.+$/;
+const stackLineRx = /\n\s+at\s+/g;
+const wildRx = /\/\[\[\.\.\.(\w+)]]/;
 
-const anyMethods = [
+const validMethods = [
   'GET',
   'POST',
   'PUT',
@@ -22,92 +24,200 @@ const anyMethods = [
   'TRACE',
 ];
 
+let _testingEnv = {};
+
 // fns
 
+const isString = R.is(String);
 const isFunction = R.is(Function);
 
-const cleanMethod = (m) => m.trim().toUpperCase();
+function ensureArray(maybeArr) {
+  return Array.isArray(maybeArr) ? maybeArr : [maybeArr];
+}
 
-const cleanMethods = (methods) => {
-  if (!Array.isArray(methods)) {
-    methods = [methods];
+function cleanMethod(method) {
+  method = method.trim().toUpperCase();
+
+  if (method === 'ANY') {
+    return null;
   }
 
-  return methods.includes('ANY') ? anyMethods :
-    methods.map(cleanMethod);
-};
+  if (!validMethods.includes(method)) {
+    throw new Error(`No such method: "${method}"`);
+  }
 
-const isMatch = (req, {methods, pattern}) => (
-  (methods ? methods.includes(req.method) : true) &&
-  (pattern ? pattern.match(req.url.replace(queryRx, '')) : {})
-);
+  return method;
+}
 
-const isFinal = ({methods, pattern}) => methods && pattern;
+function cleanPattern(wildcard, pattern) {
+  if (!wildcard) {
+    throw new Error(`Path contains no [[...wildcard]] to match URI "${pattern}" against.`);
+  }
 
-const promisifyWare = (fn) => (
-  fn.length < 3 ? fn :
-  (req, res) => new Promise((resolve, reject) => (
-    fn(req, res, (result) => (
+  pattern = new Pattern(pattern);
+
+  return function matchPattern(req) {
+    return req?.params?.[wildcard] ?
+      pattern.match(`/${req.params[wildcard].join('/')}`) : null;
+  };
+}
+
+function cleanWare(fn) {
+  if (!isFunction(fn)) {
+    throw new Error(`Not a function: "${fn}"`);
+  }
+
+  if (fn.length < 3) {
+    return fn;
+  }
+
+  return async function promisifiedWare(req, res) {
+    return new Promise((resolve, reject) => fn(req, res, (result) => (
       result instanceof Error ? reject(result) : resolve(result)
-    ))
-  ))
-);
+    )));
+  };
+}
 
-// export
+export function setTestingEnv(env) {
+  _testingEnv = env;
+}
 
-export function router(routes, {prefix = '/api'} = {}) {
-  routes = routes.map(({methods, path, ware}) => ({
-    methods: methods ? cleanMethods(methods) : null,
-    pattern: path ? new Pattern(prefix + path) : null,
-    ware: Array.isArray(ware) ? ware : ware ? [ware] : [],
-  }));
+export function resetTestingEnv() {
+  _testingEnv = {};
+}
 
-  return async function handler(req, res) {
-    try {
-      const {ware, params} = R.reduce((acc, thisRoute) => {
-        const matchParams = isMatch(req, thisRoute);
-        const finish = isFinal(thisRoute) ? R.reduced : R.identity;
+function getRouteWildcard() {
+  if (_testingEnv.wildcard) {
+    return _testingEnv.wildcard;
+  }
 
-        if (!matchParams) {
-          return acc;
+  const originalFunc = Error.prepareStackTrace;
+  Error.prepareStackTrace = (_, stack) => stack;
+
+  let callFile = null;
+
+  try {
+    const err = new Error();
+    callFile = R.reduce((prev, next) => {
+      const file = next.getFileName();
+
+      return file === prev ? file : R.reduced(file);
+    }, err.stack.shift().getFileName(), err.stack);
+  } catch (err) {}
+
+  Error.prepareStackTrace = originalFunc;
+
+  return wildRx.exec(callFile)?.[1] ?? null;
+}
+
+function parseRoute(wildcard, ...ware) {
+  let method = null;
+  let pattern = null;
+
+  if (isString(ware[0])) {
+    ware[0].trim().split(spaceRx).forEach((str) => {
+      if (str.startsWith('/')) {
+        if (pattern) {
+          throw new Error(`Only one path pattern allowed per route at "${ware[0]}`);
         }
 
-        return finish({
-          ware: [...acc.ware, ...thisRoute.ware],
-          params: {...acc.params, ...matchParams},
-        });
-      }, {ware: [], params: {}}, routes);
-
-      if (!ware.length) {
-        res.status(404);
-        res.json({
-          error: 'Route does not exist',
-          method: req.method,
-          path: req.url.replace(queryRx, ''),
-        });
+        pattern = cleanPattern(wildcard, str);
 
         return;
       }
 
-      req.params = {...req.params || {}, ...params};
+      if (method) {
+        throw new Error(`Only one method (or "ANY") allowed per route definition at "${ware[0]}"`);
+      }
 
-      await ware.reduce((prev, fn) => (
-        prev.then(() => (
-          res.writableEnded === true ? null : promisifyWare(fn)(req, res)
-        ))
-      ), Promise.resolve(null));
+      if (pattern) {
+        throw new Error(`Must match format "[METHOD] [/PATTERN]" at "${ware[0]}`);
+      }
+
+      method = cleanMethod(str);
+    });
+
+    ware.shift();
+  }
+
+  if (!ware.length) {
+    throw new Error('No sense having a route without any middleware!');
+  }
+
+  return {method, pattern, ware: ware.map(cleanWare)};
+}
+
+function matchRoute(req, {method, pattern, ware}) {
+  if (method && req.method !== method) {
+    return null;
+  }
+
+  const params = pattern ? pattern(req) : {};
+
+  if (!params) {
+    return null;
+  }
+
+  return {params, ware};
+}
+
+async function handleRoute(req, res, match) {
+  if (!match) {
+    const err = new Error('Route does not exist');
+    err.status = 404;
+    err.method = req.method;
+    err.path = req?.url?.replace(queryRx, '');
+
+    throw err;
+  }
+
+  req.params = {...req.params || {}, ...match.params};
+
+  return match.ware.reduce((prev, fn) => prev.then(() => (
+    res.writableEnded === true ? null : fn(req, res)
+  )), Promise.resolve(null));
+}
+
+function handleError(res, err) {
+  res.status(err.status || 500);
+  res.json({
+    error: err.message,
+    stack: err?.stack?.replace(cwdRx, '').split(stackLineRx),
+    ...R.map(R.identity, err),
+  });
+}
+
+// export
+
+export function router(routeMap) {
+  const wildcard = getRouteWildcard();
+  const routes = Object.keys(routeMap)
+    .map((k) => parseRoute(wildcard, k, ...ensureArray(routeMap[k])));
+
+  return async function handler(req, res) {
+    const match = R.reduce((acc, thisRoute) => (
+      acc ? R.reduced(acc) : matchRoute(req, thisRoute)
+    ), null, routes);
+
+    try {
+      await handleRoute(req, res, match);
     } catch (err) {
-      res.status(err.status || 500);
-      res.json({
-        error: err.message,
-        stack: err?.stack?.replace(cwd, '').split(stackLineRx),
-      });
+      handleError(res, err);
     }
   };
 }
 
 export function route(...args) {
-  const [ware, [methods = 'ANY', path = null]] = R.partition(isFunction, args);
+  const wildcard = getRouteWildcard();
+  const thisRoute = parseRoute(wildcard, ...args);
 
-  return router([{methods, path, ware}]);
+  return async function handler(req, res) {
+    const match = matchRoute(req, thisRoute);
+
+    try {
+      await handleRoute(req, res, match);
+    } catch (err) {
+      handleError(res, err);
+    }
+  };
 }

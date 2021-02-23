@@ -49,13 +49,17 @@
     "ramda": "^0.27.1",
     "url-pattern": "^1.0.3"
   },
+  "peerDependencies": {
+    "next": "^10.0.7"
+  },
   "devDependencies": {
     "@sitearcade/babel-preset": "0.5.0",
     "@sitearcade/browserslist-config": "0.3.0",
-    "@sitearcade/eslint-config": "1.0.0",
+    "@sitearcade/eslint-config": "1.1.7",
     "@sitearcade/jest-preset": "2.1.1",
     "jest": "26.6.3",
     "microbundle": "0.13.0",
+    "next": "10.0.7",
     "prettier": "2.2.1"
   },
   "engines": {

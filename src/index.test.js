@@ -2,7 +2,7 @@
 
 import {proxyMock} from '@sitearcade/jest-preset/tools';
 
-import {router, route} from './index';
+import {router, route, setTestingEnv, resetTestingEnv} from './index';
 
 // config
 
@@ -18,123 +18,75 @@ const nextResWare = (req, res, next) => next(null);
 const nextErrWare = (req, res, next) => next(new Error('Fail!'));
 
 const createErr = (msg = 'Fail!', props = {}) =>
-  // eslint-disable-next-line fp/no-mutating-assign
   Object.assign(new Error(msg), props);
 
 // test
 
-describe('router(routes[, opts])', () => {
+beforeEach(() => setTestingEnv({wildcard: 'test'}));
+
+afterEach(() => resetTestingEnv());
+
+describe('router(routes)', () => {
   it('creates an api handler for multiple routes', async () => {
-    const handler = router([
-      {methods: 'GET', ware: sendRes},
-      {methods: ['POST', 'PUT'], ware: [sendRes]},
-      {methods: 'PATCH', ware: sendErr},
-    ]);
+    const handler = router({
+      GET: sendRes,
+      POST: [sendRes],
+      PATCH: sendErr,
+    });
 
-    await handler({method: 'GET', url: '/api/route'}, res);
-    await handler({method: 'POST', url: '/api/route'}, res);
-    await handler({method: 'PUT', url: '/api/route'}, res);
+    await handler({method: 'GET'}, res);
+    await handler({method: 'POST'}, res);
 
-    expect(res.send).toHaveBeenCalledTimes(3);
+    expect(res.send).toHaveBeenCalledTimes(2);
     expect(res.send).toHaveBeenCalledWith('ok');
 
     res.mockClear();
 
-    await handler({method: 'DELETE', url: '/api/route'}, res);
+    await handler({method: 'DELETE'}, res);
 
     expect(res.status).toHaveBeenCalledWith(404);
 
     res.mockClear();
 
-    await handler({method: 'PATCH', url: '/api/route'}, res);
+    await handler({method: 'PATCH'}, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
   });
 
   it('support chaining middleware', async () => {
-    const handler = router([
-      {methods: 'GET', ware: [useResWare, sendRes]},
-      {methods: 'POST', ware: [nextResWare, sendRes]},
-      {methods: 'ANY', ware: [nextErrWare, sendRes]},
-    ]);
+    const handler = router({
+      GET: [useResWare, sendRes],
+      POST: [nextResWare, sendRes],
+      ANY: [nextErrWare, sendRes],
+    });
 
-    await handler({method: 'GET', url: '/api/route'}, res);
+    await handler({method: 'GET'}, res);
 
     expect(res.use).toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith('ok');
 
     res.mockClear();
 
-    await handler({method: 'POST', url: '/api/route'}, res);
+    await handler({method: 'POST'}, res);
 
     expect(res.use).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith('ok');
 
     res.mockClear();
 
-    await handler({method: 'PUT', url: '/api/route'}, res);
+    await handler({method: 'PUT'}, res);
 
     expect(res.use).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(500);
   });
-});
-
-describe('route([method, [path,]] ...ware)', () => {
-  it('creates an api handler for a single route', async () => {
-    const handler = route('GET', sendRes);
-
-    await handler({method: 'GET', url: '/api/route'}, res);
-    await handler({method: 'POST', url: '/api/route'}, res);
-
-    expect(res.send).toHaveBeenCalledTimes(1);
-    expect(res.send).toHaveBeenCalledWith('ok');
-  });
-
-  it('matches routes with wildcards', async () => {
-    const handler = route('ANY', '/route/*', sendRes);
-
-    await handler({method: 'GET', url: '/api/route/cool'}, res);
-    await handler({method: 'GET', url: '/api/route/cool/er'}, res);
-    await handler({method: 'GET', url: '/api/route/cool/est'}, res);
-    await handler({method: 'POST', url: '/api/elsewise'}, res);
-
-    expect(res.send).toHaveBeenCalledTimes(3);
-    expect(res.send).toHaveBeenCalledWith('ok');
-  });
-
-  it('collects matching and optional params', async () => {
-    const handler = route('ANY', '/route/:req(/:opt)', sendParams);
-
-    await handler({method: 'GET', url: '/api/route'}, res);
-
-    expect(res.send).not.toHaveBeenCalled();
-
-    res.mockClear();
-
-    await handler({method: 'GET', url: '/api/route/req'}, res);
-
-    expect(res.send).toHaveBeenCalledWith({req: 'req'});
-
-    res.mockClear();
-
-    await handler({method: 'GET', url: '/api/route/req/opt'}, res);
-
-    expect(res.send).toHaveBeenCalledWith({req: 'req', opt: 'opt'});
-  });
 
   it('sends reasonable error response', async () => {
-    const handler = router([
-      {
-        path: '/err/default',
-        ware: () => throw createErr('Default!', {}),
-      },
-      {
-        path: '/err/status',
-        ware: () => throw createErr('410!', {status: 410}),
-      },
-    ]);
+    const handler = router({
+      'ANY /err/default': () => throw createErr('Default!', {}),
+      'ANY /err/status': () => throw createErr('410!', {status: 410}),
+    });
 
-    await handler({url: '/api/err/default'}, res);
+    await handler({params: {test: ['err', 'default']}}, res);
 
     expect(res.json).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(500);
@@ -143,11 +95,94 @@ describe('route([method, [path,]] ...ware)', () => {
 
     res.mockClear();
 
-    await handler({url: '/api/err/status'}, res);
+    await handler({params: {test: ['err', 'status']}}, res);
 
     expect(res.json).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(410);
     expect(res.json.mock.calls[0][0]).toHaveProperty('error', '410!');
     expect(res.json.mock.calls[0][0].stack).toBeArray();
+  });
+});
+
+describe('route([method, [path,]] ...ware)', () => {
+  it('creates an api handler for a single route', async () => {
+    const handler = route('GET', sendRes);
+
+    await handler({method: 'GET'}, res);
+    await handler({method: 'POST'}, res);
+
+    expect(res.send).toHaveBeenCalledTimes(1);
+    expect(res.send).toHaveBeenCalledWith('ok');
+  });
+
+  it('matches routes with wildcards', async () => {
+    const handler = route('ANY /*', sendRes);
+
+    await handler({method: 'GET', params: {test: ['cool']}}, res);
+    await handler({method: 'PUT', params: {test: ['cool', 'er']}}, res);
+    await handler({method: 'POST', params: {test: ['cool', 'est']}}, res);
+    await handler({method: 'PATCH', params: {}}, res);
+
+    expect(res.send).toHaveBeenCalledTimes(3);
+    expect(res.send).toHaveBeenCalledWith('ok');
+  });
+
+  it('collects matching and optional params', async () => {
+    const handler = route('ANY /:req(/:opt)', sendParams);
+
+    await handler({method: 'GET', params: {}}, res);
+
+    expect(res.send).not.toHaveBeenCalled();
+
+    res.mockClear();
+
+    await handler({method: 'GET', params: {test: ['req']}}, res);
+
+    expect(res.send).toHaveBeenCalledWith({
+      req: 'req',
+      test: ['req'],
+    });
+
+    res.mockClear();
+
+    await handler({method: 'GET', params: {test: ['req', 'opt']}}, res);
+
+    expect(res.send).toHaveBeenCalledWith({
+      req: 'req',
+      opt: 'opt',
+      test: ['req', 'opt'],
+    });
+  });
+
+  it('prevents broken routes', async () => {
+    expect(() => route()).toThrowErrorMatchingInlineSnapshot(
+      '"No sense having a route without any middleware!"',
+    );
+
+    expect(() => route('FAKE')).toThrowErrorMatchingInlineSnapshot(
+      '"No such method: \\"FAKE\\""',
+    );
+
+    expect(() => route(false)).toThrowErrorMatchingInlineSnapshot(
+      '"Not a function: \\"false\\""',
+    );
+
+    expect(() => route('GET POST', sendRes)).toThrowErrorMatchingInlineSnapshot(
+      '"Only one method (or \\"ANY\\") allowed per route definition at \\"GET POST\\""',
+    );
+
+    expect(() => route('/route PUT', sendRes)).toThrowErrorMatchingInlineSnapshot(
+      '"Must match format \\"[METHOD] [/PATTERN]\\" at \\"/route PUT"',
+    );
+
+    expect(() => route('GET /route /other', sendRes)).toThrowErrorMatchingInlineSnapshot(
+      '"Only one path pattern allowed per route at \\"GET /route /other"',
+    );
+
+    resetTestingEnv();
+
+    expect(() => route('ANY /*', sendRes)).toThrowErrorMatchingInlineSnapshot(
+      '"Path contains no [[...wildcard]] to match URI \\"/*\\" against."',
+    );
   });
 });
