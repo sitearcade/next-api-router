@@ -57,8 +57,8 @@ function cleanPattern(wildcard, pattern) {
   pattern = new Pattern(pattern);
 
   return function matchPattern(req) {
-    return req?.params?.[wildcard] ?
-      pattern.match(`/${req.params[wildcard].join('/')}`) : null;
+    return req?.query?.[wildcard] ?
+      pattern.match(`/${req.query[wildcard].join('/')}`) : null;
   };
 }
 
@@ -171,7 +171,7 @@ async function handleRoute(req, res, match) {
     throw err;
   }
 
-  req.params = {...req.params || {}, ...match.params};
+  req.query = {...req.query || {}, ...match.params};
 
   return match.ware.reduce((prev, fn) => prev.then(() => (
     res.writableEnded === true ? null : fn(req, res)

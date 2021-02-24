@@ -11,7 +11,7 @@ const res = proxyMock.createMockProxy();
 // fns
 
 const sendRes = (req, res) => res.send('ok');
-const sendParams = (req, res) => res.send(req.params);
+const sendParams = (req, res) => res.send(req.query);
 const sendErr = () => throw new Error('Fail!');
 const useResWare = (req, res) => res.use();
 const nextResWare = (req, res, next) => next(null);
@@ -86,7 +86,7 @@ describe('router(routes)', () => {
       'ANY /err/status': () => throw createErr('410!', {status: 410}),
     });
 
-    await handler({params: {test: ['err', 'default']}}, res);
+    await handler({query: {test: ['err', 'default']}}, res);
 
     expect(res.json).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(500);
@@ -95,7 +95,7 @@ describe('router(routes)', () => {
 
     res.mockClear();
 
-    await handler({params: {test: ['err', 'status']}}, res);
+    await handler({query: {test: ['err', 'status']}}, res);
 
     expect(res.json).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(410);
@@ -118,10 +118,10 @@ describe('route([method, [path,]] ...ware)', () => {
   it('matches routes with wildcards', async () => {
     const handler = route('ANY /*', sendRes);
 
-    await handler({method: 'GET', params: {test: ['cool']}}, res);
-    await handler({method: 'PUT', params: {test: ['cool', 'er']}}, res);
-    await handler({method: 'POST', params: {test: ['cool', 'est']}}, res);
-    await handler({method: 'PATCH', params: {}}, res);
+    await handler({method: 'GET', query: {test: ['cool']}}, res);
+    await handler({method: 'PUT', query: {test: ['cool', 'er']}}, res);
+    await handler({method: 'POST', query: {test: ['cool', 'est']}}, res);
+    await handler({method: 'PATCH', query: {}}, res);
 
     expect(res.send).toHaveBeenCalledTimes(3);
     expect(res.send).toHaveBeenCalledWith('ok');
@@ -130,13 +130,13 @@ describe('route([method, [path,]] ...ware)', () => {
   it('collects matching and optional params', async () => {
     const handler = route('ANY /:req(/:opt)', sendParams);
 
-    await handler({method: 'GET', params: {}}, res);
+    await handler({method: 'GET', query: {}}, res);
 
     expect(res.send).not.toHaveBeenCalled();
 
     res.mockClear();
 
-    await handler({method: 'GET', params: {test: ['req']}}, res);
+    await handler({method: 'GET', query: {test: ['req']}}, res);
 
     expect(res.send).toHaveBeenCalledWith({
       req: 'req',
@@ -145,7 +145,7 @@ describe('route([method, [path,]] ...ware)', () => {
 
     res.mockClear();
 
-    await handler({method: 'GET', params: {test: ['req', 'opt']}}, res);
+    await handler({method: 'GET', query: {test: ['req', 'opt']}}, res);
 
     expect(res.send).toHaveBeenCalledWith({
       req: 'req',
