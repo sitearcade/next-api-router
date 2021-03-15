@@ -2,8 +2,8 @@
 
 export * from './router';
 // export * from './ware/authWare';
-// export * from './ware/corsWare';
-// export * from './ware/devWare';
+export * from './ware/corsWare';
+export * from './ware/devWare';
 // export * from './ware/helmetWare';
 // export * from './ware/jwtWare';
 // export * from './ware/githubHookWare';
