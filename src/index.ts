@@ -1,7 +1,7 @@
 // export
 
 export * from './router';
-export * from './ware/authWare';
+// export * from './ware/authWare';
 export * from './ware/corsWare';
 export * from './ware/devWare';
 export * from './ware/helmetWare';
