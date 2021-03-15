@@ -12,26 +12,20 @@
     "url": "https://www.sitearcade.com"
   },
   "sideEffects": false,
-  "source": "src/index.js",
+  "source": "src/index.ts",
+  "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
-  "jsnext:main": "./dist/index.modern.js",
   "module": "./dist/index.module.js",
-  "syntax": {
-    "esmodules": "./dist/index.modern.js"
-  },
+  "esmodule": "./dist/index.modern.js",
   "exports": {
-    ".": {
-      "browser": "./dist/index.module.js",
-      "import": "./dist/index.module.js",
-      "require": "./dist/index.js"
-    }
+    ".": "./dist/index.js"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "start": "microbundle watch --no-compress -f cjs,esm,modern --jsx React.createElement --jsxImportSource react",
-    "build": "microbundle --no-compress -f cjs,esm,modern --jsx React.createElement --jsxImportSource react",
+    "start": "microbundle watch --no-compress -f cjs,esm,modern",
+    "build": "microbundle --no-compress -f cjs,esm,modern",
     "clean": "rm -rf dist",
     "test": "NODE_ENV=testing jest --passWithNoTests --coverage",
     "test:ci": "NODE_ENV=testing jest --passWithNoTests --ci",
@@ -42,25 +36,32 @@
     "postpublish": "git push origin --all; git push origin --tags"
   },
   "dependencies": {
-    "@sitearcade/is-env": "^0.1.0",
-    "@sitearcade/request": "^0.4.0",
+    "@auth0/nextjs-auth0": "^1.2.0",
+    "@serverless-jwt/jwt-verifier": "^0.2.1",
+    "@sitearcade/is-env": "^0.2.0",
+    "@sitearcade/request": "^1.1.1",
     "cors": "^2.8.5",
+    "crypto": "1.0.1",
     "github-webhook-middleware": "^0.0.2",
-    "ramda": "^0.27.1",
-    "url-pattern": "^1.0.3"
+    "helmet": "4.4.1",
+    "next-connect": "^0.10.0",
+    "ramda": "^0.27.1"
   },
   "peerDependencies": {
-    "next": "^10.0.7"
+    "next": "^10.0.8"
   },
   "devDependencies": {
-    "@sitearcade/babel-preset": "0.5.0",
-    "@sitearcade/browserslist-config": "0.3.0",
-    "@sitearcade/eslint-config": "1.1.7",
-    "@sitearcade/jest-preset": "2.1.1",
+    "@sitearcade/babel-preset": "1.1.9",
+    "@sitearcade/browserslist-config": "0.3.1",
+    "@sitearcade/eslint-config": "1.4.0",
+    "@sitearcade/jest-preset": "2.2.0",
+    "@types/cors": "2.8.10",
+    "@types/ramda": "0.27.38",
     "jest": "26.6.3",
     "microbundle": "0.13.0",
-    "next": "10.0.7",
-    "prettier": "2.2.1"
+    "next": "10.0.8",
+    "prettier": "2.2.1",
+    "typescript": "4.2.3"
   },
   "engines": {
     "node": ">=10"
